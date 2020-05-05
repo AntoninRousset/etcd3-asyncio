@@ -22,7 +22,6 @@ from collections import defaultdict
 
 from . import client, CreateRevision, request
 from .lock import Lock
-from .utils import normalize_key
 
 
 class Condition(client.User):
@@ -47,7 +46,7 @@ class Condition(client.User):
             raise ValueError('loop argument must agree with lock')
         self._lock = lock
 
-        self.key = normalize_key(key)
+        self.key = key
         if lock.key != self.key:
             raise ValueError('key argument must agree with lock')
 

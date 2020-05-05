@@ -21,7 +21,6 @@ import asyncio
 from collections import defaultdict
 
 from . import client, CreateRevision, request
-from .utils import normalize_key
 
 
 class Lock(client.User):
@@ -40,7 +39,7 @@ class Lock(client.User):
         if loop is None:
             loop = asyncio.get_event_loop()
 
-        self.key = normalize_key(key)
+        self.key = key
         self._loop = loop
 
     async def __aenter__(self):
