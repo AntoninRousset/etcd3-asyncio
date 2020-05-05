@@ -31,5 +31,5 @@ from .etcd_pb2 import TxnRequest
 from .etcd_pb2 import TxnResponse
 
 # Watch
-from .etcd_pb2 import WatchCancelRequest, WatchCreateRequest, WatchProgressRequest
+from .etcd_pb2 import WatchCancelRequest, WatchCreateRequest, WatchProgressRequest, WatchRequest
 from .etcd_pb2 import WatchResponse

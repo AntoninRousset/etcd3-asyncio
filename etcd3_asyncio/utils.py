@@ -26,3 +26,7 @@ def ensure_iter(obj, *, exceptions=[str]):
         return obj
     else:
         return (obj,)
+
+
+def normalize_key(key: str):
+    return str(key).rstrip('/') + '/'

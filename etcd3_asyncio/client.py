@@ -17,41 +17,75 @@ specific language governing permissions and limitations
 under the License.
 '''
 
+import asyncio
 from abc import ABC
+from collections import defaultdict
 from grpclib.client import Channel
 
 from . import _etcd, request
-from .request import Delete, Get, Put, Range, Txn
 from .utils import ensure_iter
 
 
 class Client:
 
-    def __init__(self, host='127.0.0.1', port=2379):
+    def __init__(self, host='127.0.0.1', port=2379, *, ttl=10):
         self._channel = Channel(host, port)
+
         self._kvstub = _etcd.KVStub(self._channel)
+        self._leasestub = _etcd.LeaseStub(self._channel)
+        self._watchstub = _etcd.WatchStub(self._channel)
+
+        self._session = self.Lease(ttl)
 
     def __del__(self):
         self._channel.close()
 
+    def __await__(self):
+        return self.start_session().__await__()
+
+    async def start_session(self):
+        await self._session.grant()
+        return self
+
     def delete(self, key: str, range_end: str = ''):
-        return request.Delete(key, range_end, client=self)
+        return request.DeleteRange(key, range_end, client=self).send()
 
-    def get(self, key: str) -> str:
-        return request.Get(key, client=self)
+    def get(self, *args, **kwargs) -> str:
+        return request.Get(*args, **kwargs, client=self).send()
 
-    def put(self, key: str, value: str):
-        return request.Put(key, value, client=self)
+    def Lease(self, *args, **kwargs):
+        from .lease import Lease
+        return Lease(*args, **kwargs, client=self)
 
-    def range(self, key: str, range_end: str = '', limit: int = 0) -> str:
-        return request.Range(key, range_end, limit, client=self)
+    def Lock(self, *args, **kwargs):
+        from .lock import Lock
+        return Lock(*args, **kwargs, client=self)
+
+    def put(self, *args, **kwargs):
+        return request.Put(*args, **kwargs, client=self).send()
+
+    def range(self, *args, **kwargs):
+        return request.Range(*args, **kwargs, client=self).send()
 
     def txn(self, compare, success, failure):
         compare = [c for c in ensure_iter(compare)]
         success = [RequestOp(s) for s in ensure_iter(success)]
         failure = [RequestOp(f) for f in ensure_iter(failure)]
 
-        return request.Txn(compare, success, failure, client=self)
+        return request.Txn(compare, success, failure, client=self).send()
+
+    def watch(self, *args, **kwargs):
+        return request.Watch(*args, **kwargs, client=self).send()
+
+
+class User:
+
+    def __init__(self, client):
+        self.client = client
+
+    @property
+    def session_id(self):
+        return self.client._session.id
 
 
 class RequestOp:

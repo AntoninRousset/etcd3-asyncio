@@ -20,4 +20,4 @@ under the License.
 
 from .client import Client
 from .compare import CreateRevision, ModRevision, Value, Version
-from .request import Delete, Get, Put, Range, Txn
+from .request import DeleteRange, Get, Put, Range, Txn
