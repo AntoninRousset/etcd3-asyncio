@@ -47,8 +47,15 @@ class Client:
         await self._session.grant()
         return self
 
-    def delete(self, key: str, range_end: str = ''):
-        return request.DeleteRange(key, range_end, client=self).send()
+    def Condition(self, *args, **kwargs):
+        from .condition import Condition
+        return Condition(*args, **kwargs, client=self)
+
+    def delete(self, *args, **kwargs):
+        return request.Delete(*args, **kwargs, client=self).send()
+
+    def delete_range(self, *args, **kwargs):
+        return request.DeleteRange(*args, **kwargs, client=self).send()
 
     def get(self, *args, **kwargs) -> str:
         return request.Get(*args, **kwargs, client=self).send()

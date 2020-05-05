@@ -244,22 +244,6 @@ class Watch(Stream):
             ), resend=False
         )
 
-    async def send(self):
-        if self.client is None:
-            raise RuntimeError('Request needs a client')
-
-        try:
-            async with self._method.open() as stream:
-                await stream.send_message(self._request)
-                while True:
-                    response = await stream.recv_message()
-                    for event in response.events:
-                        yield event
-                    if self.resend:
-                        await stream.send_message(self._request)
-        except ConnectionRefusedError:
-            raise RuntimeError('Could not connect to etcd')
-
     def parse_response(self, response):
         return response.events
 
@@ -268,11 +252,19 @@ class Watch(Stream):
         return self.client._watchstub.Watch
 
 
-class Get(Range):
+class Delete(DeleteRange):
 
     def __init__(self, key: str, *, parse=True, client=None):
-        super().__init__(key, key, 1, parse=parse, client=client)
+        super().__init__(key, '', parse=parse, client=client)
+
+
+class Get(Range):
+
+    def __init__(self, key: str, default=None, *, parse=True, client=None):
+        super().__init__(key, '', 1, parse=parse, client=client)
+        self.default = default
 
     def parse_response(self, response):
         if response.count >= 1:
             return response.kvs[0].value.decode()
+        return self.default
