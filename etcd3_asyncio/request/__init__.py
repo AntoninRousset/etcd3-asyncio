@@ -17,8 +17,7 @@ specific language governing permissions and limitations
 under the License.
 '''
 
-from .client import Client, get_client
-from .compare import CreateRevision, ModRevision, Value, Version
-from .condition import Condition
-from .lock import Lock
-from .request import DeleteRange, Get, Put, Range, Txn, Watch
+from .stream import LeaseKeepAlive, Watch
+from .unary import Delete, DeleteRange, Get, LeaseGrant, LeaseRevoke, Put, Range, Txn
+
+

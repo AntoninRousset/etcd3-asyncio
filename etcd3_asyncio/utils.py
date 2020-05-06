@@ -26,3 +26,7 @@ def ensure_iter(obj, *, exceptions=[str]):
         return obj
     else:
         return (obj,)
+
+
+def range_end_for_prefix(prefix):
+    return prefix[0:-1] + bytes([prefix[-1] + 1])

@@ -20,10 +20,11 @@ under the License.
 import asyncio
 from collections import defaultdict
 
-from . import client, CreateRevision, request
+from . import CreateRevision, get_client, request
+from .utils import ensure_iter
 
 
-class Lock(client.User):
+class Lock():
 
     class _Common:
         waiters = defaultdict(dict)
@@ -33,13 +34,14 @@ class Lock(client.User):
         lock_ids = defaultdict(int)
 
     # TODO different loops
-    def __init__(self, key: str, *, client, loop=None):
-        super().__init__(client)
-
+    def __init__(self, key: str, *, client=None, loop=None):
+        if client is None:
+            client = get_client()
         if loop is None:
             loop = asyncio.get_event_loop()
 
-        self.key = key
+        self._key = key
+        self._client = client
         self._loop = loop
 
     async def __aenter__(self):
@@ -50,13 +52,14 @@ class Lock(client.User):
         self.release()
 
     async def _watch(self):
-        async for events in self.client.watch(self._lock_prefix,
-                                              filters='noput'):
-            owner = await self.client.range(self._lock_prefix, limit=1,
-                                            sort_target='create',
-                                            sort_order='ascend')
+        async for events in request.Watch(self._lock_prefix, filters='noput',
+                                          client=self._client):
+            owner = await request.Range(self._lock_prefix, limit=1,
+                                        sort_target='create',
+                                        sort_order='ascend',
+                                        client=self._client)
             try:
-                self.owner = next(owner)[0]
+                self.owner = next(iter(owner))
                 if self.owner in self._waiters:
                     waiter = self._waiters.pop(self.owner)
                     if not waiter.done():
@@ -64,70 +67,69 @@ class Lock(client.User):
                 elif not self._waiters:
                     raise StopIteration
             except StopIteration:
-                pass
-                #self.owner = None
-                # self._locked.set()
-                # return
+                self.owner = None
+                return
             except Exception as e:
                 print('***', repr(e))
+                raise
 
-    async def acquire(self):
-
-        if self._watcher is None or self._watcher.done():
-            self._watcher = self._loop.create_task(self._watch())
-
+    async def acquire(self, actions=[]):
         async with self._orderer:
             while True:
                 lock_id = str(self._lock_id).zfill(19)
-                lock_key = self._session_prefix + '/' + lock_id
+                lock_key = self._session_prefix + lock_id
                 self._lock_id += 1
 
                 cond = CreateRevision(lock_key) == 0,
-                put = request.Put(lock_key, '', self.session_id)
+                put = request.Put(lock_key, '', self._client.session_id)
                 get = request.Get(lock_key)
                 get_owner = request.Range(self._lock_prefix, limit=1,
                                           sort_target='create',
-                                          sort_order='ascend')
-                resp = await self.client.txn(cond, [put, get_owner],
-                                             [get, get_owner])
+                                          sort_order='ascend',
+                                          client=self._client)
 
-                owner = resp.responses[1].response_range.kvs[0].key
-                self.owner = owner.decode()
+                actions = [put, get_owner, *ensure_iter(actions)]
 
-                if resp.succeeded:
+                succeeded, r = await request.Txn(compare=cond, success=actions,
+                                                 failure=[get, get_owner],
+                                                 client=self._client)
+
+                self.owner = next(iter(r[1]))
+
+                if succeeded:
                     break
                 # TODO find a good lock_id, based on newest key in session
                 print('failed to find lock key')
 
-        if self.owner == lock_key:
-            return
+        if self.owner != lock_key:
+            fut = self._loop.create_future()
+            self._waiters[lock_key] = fut
+            if self._watcher is None or self._watcher.done():
+                self._watcher = self._loop.create_task(self._watch())
+            await fut
+        return r[2:]
 
-        fut = self._loop.create_future()
-        self._waiters[lock_key] = fut
-        if self._watcher is None or self._watcher.done():
-            self._watcher = self._loop.create_task(self._watch())
-
-        await fut
-
-    async def _release(self, lock_key):
+    async def _release(self, lock_key, actions):
         try:
-            await self.client.delete(lock_key)
+            actions = [request.Delete(lock_key), *ensure_iter(actions)]
+            _, r = await request.Txn(success=actions, client=self._client)
+            return r[1:]
         except Exception as e:
             print('xxx', repr(e))
 
-    def release(self):
-        self._loop.create_task(self._release(self.owner))
+    def release(self, actions=[]):
+        return self._loop.create_task(self._release(self.owner, actions))
 
     def locked(self):
         return self.owner is not None
 
     @property
     def _lock_prefix(self):
-        return self.key + '_lock/'
+        return self._key + '/_lock/'
 
     @property
     def _session_prefix(self):
-        return self._lock_prefix + str(self.client._session.id)
+        return self._lock_prefix + str(self._client._session.id) + '/'
 
     @property
     def _orderer(self):

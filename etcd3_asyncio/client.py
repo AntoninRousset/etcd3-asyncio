@@ -17,13 +17,9 @@ specific language governing permissions and limitations
 under the License.
 '''
 
-import asyncio
-from abc import ABC
-from collections import defaultdict
 from grpclib.client import Channel
 
-from . import _etcd, request
-from .utils import ensure_iter
+from . import _etcd
 
 
 class Client:
@@ -35,67 +31,25 @@ class Client:
         self._leasestub = _etcd.LeaseStub(self._channel)
         self._watchstub = _etcd.WatchStub(self._channel)
 
-        self._session = self.Lease(ttl)
+        from .lease import Lease
+        self._session = Lease(ttl, client=self)
 
     def __del__(self):
         self._channel.close()
 
-    def __await__(self):
-        return self.start_session().__await__()
-
     async def start_session(self):
         await self._session.grant()
-        return self
-
-    def Condition(self, *args, **kwargs):
-        from .condition import Condition
-        return Condition(*args, **kwargs, client=self)
-
-    def delete(self, *args, **kwargs):
-        return request.Delete(*args, **kwargs, client=self).send()
-
-    def delete_range(self, *args, **kwargs):
-        return request.DeleteRange(*args, **kwargs, client=self).send()
-
-    def get(self, *args, **kwargs) -> str:
-        return request.Get(*args, **kwargs, client=self).send()
-
-    def Lease(self, *args, **kwargs):
-        from .lease import Lease
-        return Lease(*args, **kwargs, client=self)
-
-    def Lock(self, *args, **kwargs):
-        from .lock import Lock
-        return Lock(*args, **kwargs, client=self)
-
-    def put(self, *args, **kwargs):
-        return request.Put(*args, **kwargs, client=self).send()
-
-    def range(self, *args, **kwargs):
-        return request.Range(*args, **kwargs, client=self).send()
-
-    def txn(self, compare, success, failure):
-        compare = [c for c in ensure_iter(compare)]
-        success = [RequestOp(s) for s in ensure_iter(success)]
-        failure = [RequestOp(f) for f in ensure_iter(failure)]
-
-        return request.Txn(compare, success, failure, client=self).send()
-
-    def watch(self, *args, **kwargs):
-        return request.Watch(*args, **kwargs, client=self).send()
-
-
-class User:
-
-    def __init__(self, client):
-        self.client = client
 
     @property
     def session_id(self):
-        return self.client._session.id
+        return self._session.id
 
 
-class RequestOp:
+_running_client = None
 
-    def __init__(self, request: request.Request):
-        self._request_op = _etcd.RequestOp(**{request.type: request._request})
+
+def get_client():
+    global _running_client
+    if _running_client is None:
+        _running_client = Client()
+    return _running_client

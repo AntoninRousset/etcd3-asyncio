@@ -21,10 +21,11 @@ import asyncio
 from collections import defaultdict
 
 from . import client, CreateRevision, request
+from .client import get_client
 from .lock import Lock
 
 
-class Condition(client.User):
+class Condition():
 
     class _Common:
         waiters = defaultdict(dict)
@@ -33,25 +34,26 @@ class Condition(client.User):
         cond_ids = defaultdict(int)
 
     # TODO different loops
-    def __init__(self, key: str, lock: Lock = None, *, client, loop=None):
-        super().__init__(client)
-
+    def __init__(self, key: str, lock: Lock = None, *, client=None, loop=None):
+        if client is None:
+            client = get_client()
         if loop is None:
             loop = asyncio.get_event_loop()
-        self._loop = loop
-
         if lock is None:
             lock = Lock(key, client=client, loop=loop)
         elif lock._loop is not self._loop:
             raise ValueError('loop argument must agree with lock')
-        self._lock = lock
-
-        self.key = key
-        if lock.key != self.key:
+        if lock._key != key:
             raise ValueError('key argument must agree with lock')
+
+        self._key = key
+        self._lock = lock
+        self._client = client
+        self._loop = loop
 
         self.locked = lock.locked
         self.acquire = lock.acquire
+        self._notifying = asyncio.Lock()
 
     async def __aenter__(self):
         await self.acquire()
@@ -61,8 +63,8 @@ class Condition(client.User):
         self.release()
 
     async def _watch(self):
-        async for events in self.client.watch(self._cond_prefix,
-                                              filters='noput'):
+        async for events in request.Watch(self._cond_prefix, filters='noput',
+                                          client=self._client):
             for event in events:
                 try:
                     key = event.kv.key.decode()
@@ -73,12 +75,11 @@ class Condition(client.User):
                     elif not self._waiters:
                         raise StopIteration
                 except StopIteration:
-                    pass
-                    # return
+                    return
                 except Exception as e:
                     print('***', repr(e))
 
-    async def wait(self):
+    async def wait(self, actions=[]):
         if not self.locked():
             raise RuntimeError('cannot wait on un-acquired lock')
 
@@ -89,11 +90,12 @@ class Condition(client.User):
                 self._cond_id += 1
 
                 cond = CreateRevision(cond_key) == 0,
-                put = [request.Put(cond_key, '', self.session_id),
+                put = [request.Put(cond_key, '', self._client.session_id),
                        request.Delete(self._lock.owner)]  # release lock
-                resp = await self.client.txn(cond, put, [])
+                succeeded, r = await request.Txn(compare=cond, success=put,
+                                                 client=self._client)
 
-                if resp.succeeded:
+                if succeeded:
                     break
                 # TODO find a good cond_id, based on newest key in session
                 print('failed to find cond key')
@@ -109,8 +111,7 @@ class Condition(client.User):
             cancelled = False
             while True:
                 try:
-                    await self.acquire()
-                    break
+                    return await self.acquire(actions)
                 except asyncio.CancelledError:
                     cancelled = True
 
@@ -125,7 +126,8 @@ class Condition(client.User):
         return result
 
     async def _notify_all(self):
-        await self.client.delete_range(self._cond_prefix)
+        async with self._notifying:
+            await request.DeleteRange(self._cond_prefix, client=self._client)
 
     def notify_all(self):
         self._loop.create_task(self._notify_all())
@@ -133,16 +135,20 @@ class Condition(client.User):
     def notify(self, n):
         raise NotImplementedError()
 
+    async def _release(self):
+        async with self._notifying:
+            self._lock.release()
+
     def release(self):
-        self._lock.release()
+        return self._loop.create_task(self._release())
 
     @property
     def _cond_prefix(self):
-        return self.key + '_condition/'
+        return self._key + '/_condition/'
 
     @property
     def _session_prefix(self):
-        return self._cond_prefix + str(self.client._session.id)
+        return self._cond_prefix + str(self._client.session_id)
 
     @property
     def _orderer(self):

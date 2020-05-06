@@ -19,20 +19,22 @@ under the License.
 
 import asyncio
 
-from . import client, request
+from . import request
+from .client import get_client
 
 
-class Lease(client.User):
+class Lease():
 
-    def __init__(self, ttl, id=0, *, client, loop=None):
-        super().__init__(client)
-
+    def __init__(self, ttl, id=0, *, client=None, loop=None):
+        if client is None:
+            client = get_client
         if loop is None:
             loop = asyncio.get_event_loop()
-        self._loop = loop
 
         self.ttl = ttl
         self.id = id
+        self._client = client
+        self._loop = loop
 
         self._keeping_alive = None
 
@@ -40,20 +42,20 @@ class Lease(client.User):
         return self.grant().__await__()
 
     async def __keep_alive(self):
-        keepalive = request.LeaseKeepAlive(self.id, client=self.client)
+        keepalive = request.LeaseKeepAlive(self.id, client=self._client)
         try:
-            async for ttl in keepalive.send():
+            async for ttl in keepalive:
                 await asyncio.sleep(ttl/3)
         except Exception as e:
             print(repr(e))
 
     async def grant(self, *, keepalive=True):
         self.id = await request.LeaseGrant(self.ttl, self.id,
-                                           client=self.client).send()
+                                           client=self._client)
         if keepalive:
             self._keepingalive = self._loop.create_task(self.__keep_alive())
         return self.id
 
     async def revoke(self):
         self._keeping_alive.cancel()
-        await request.LeaseRevoke(self.id, client=self.client).send()
+        await request.LeaseRevoke(self.id, client=self._client)
