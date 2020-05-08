@@ -135,12 +135,12 @@ class Condition():
     def notify(self, n):
         raise NotImplementedError()
 
-    async def _release(self):
+    async def _release(self, actions):
         async with self._notifying:
-            self._lock.release()
+            self._lock.release(actions)
 
-    def release(self):
-        return self._loop.create_task(self._release())
+    def release(self, actions=[]):
+        return self._loop.create_task(self._release(actions))
 
     @property
     def _cond_prefix(self):
