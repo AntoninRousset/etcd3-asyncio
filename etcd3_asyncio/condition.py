@@ -24,6 +24,8 @@ from . import client, CreateRevision, request
 from .client import get_client
 from .lock import Lock
 
+# TODO __repr__ and __str__
+
 
 class Condition():
 
@@ -55,6 +57,11 @@ class Condition():
         self.acquire = lock.acquire
         self._notifying = asyncio.Lock()
 
+    def __repr__(self):
+        res = super().__repr__()
+        extra = 'locked' if self.locked() else 'unlocked'
+        return '<{} [{}]>'.format(res[1:-1], extra)
+
     async def __aenter__(self):
         await self.acquire()
         return None
@@ -83,6 +90,7 @@ class Condition():
         if not self.locked():
             raise RuntimeError('cannot wait on un-acquired lock')
 
+        await self._client.start_session()
         async with self._orderer:
             while True:
                 cond_id = str(self._cond_id).zfill(19)
@@ -118,15 +126,16 @@ class Condition():
             if cancelled:
                 raise asyncio.CancelledError
 
-    async def wait_for(self, predicate):
+    async def wait_for(self, predicate, actions=[]):
         result = predicate()
         while not result:
-            await self.wait()
+            await self.wait(actions)
             result = predicate()
         return result
 
     async def _notify_all(self):
         async with self._notifying:
+            await self._client.start_session()
             await request.DeleteRange(self._cond_prefix, client=self._client)
 
     def notify_all(self):

@@ -23,6 +23,8 @@ from collections import defaultdict
 from . import CreateRevision, get_client, request
 from .utils import ensure_iter
 
+# TODO __repr__ and __str__
+
 
 class Lock():
 
@@ -44,6 +46,11 @@ class Lock():
         self._client = client
         self._loop = loop
 
+    def __repr__(self):
+        res = super().__repr__()
+        extra = 'locked' if self._locked else 'unlocked'
+        return '<{} [{}]>'.format(res[1:-1], extra)
+
     async def __aenter__(self):
         await self.acquire()
         return None
@@ -52,6 +59,7 @@ class Lock():
         self.release()
 
     async def _watch(self):
+        await self._client.start_session()
         async for events in request.Watch(self._lock_prefix, filters='noput',
                                           client=self._client):
             owner = await request.Range(self._lock_prefix, limit=1,
@@ -74,6 +82,7 @@ class Lock():
                 raise
 
     async def acquire(self, actions=[]):
+        await self._client.start_session()
         async with self._orderer:
             while True:
                 lock_id = str(self._lock_id).zfill(19)
@@ -88,9 +97,9 @@ class Lock():
                                           sort_order='ascend',
                                           client=self._client)
 
-                actions = [put, get_owner, *ensure_iter(actions)]
+                success = [put, get_owner, *ensure_iter(actions)]
 
-                succeeded, r = await request.Txn(compare=cond, success=actions,
+                succeeded, r = await request.Txn(compare=cond, success=success,
                                                  failure=[get, get_owner],
                                                  client=self._client)
 
@@ -107,15 +116,14 @@ class Lock():
             if self._watcher is None or self._watcher.done():
                 self._watcher = self._loop.create_task(self._watch())
             await fut
+            _, r = await request.Txn(success=success, client=self._client)
         return r[2:]
 
     async def _release(self, lock_key, actions):
-        try:
-            actions = [request.Delete(lock_key), *ensure_iter(actions)]
-            _, r = await request.Txn(success=actions, client=self._client)
-            return r[1:]
-        except Exception as e:
-            print('xxx', repr(e))
+        await self._client.start_session()
+        actions = [request.Delete(lock_key), *ensure_iter(actions)]
+        _, r = await request.Txn(success=actions, client=self._client)
+        return r[1:]
 
     def release(self, actions=[]):
         return self._loop.create_task(self._release(self.owner, actions))
