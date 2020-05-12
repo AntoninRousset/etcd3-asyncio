@@ -24,8 +24,6 @@ from . import client, CreateRevision, request
 from .client import get_client
 from .lock import Lock
 
-# TODO __repr__ and __str__
-
 
 class Condition():
 

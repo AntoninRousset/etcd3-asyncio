@@ -1,8 +1,0 @@
-import etcd3_asyncio as etcd3
-
-
-async def locker():
-    client = await etcd3.get_client()
-
-    etcd3.Range('a')
-

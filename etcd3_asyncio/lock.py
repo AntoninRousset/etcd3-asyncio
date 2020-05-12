@@ -23,8 +23,6 @@ from collections import defaultdict
 from . import CreateRevision, get_client, request
 from .utils import ensure_iter
 
-# TODO __repr__ and __str__
-
 
 class Lock():
 

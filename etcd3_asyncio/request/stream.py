@@ -85,7 +85,7 @@ class Watch(Stream):
 
         filters = [self.filter_types[f] for f in ensure_iter(filters)]
 
-        request = _etcd.WatchRequest(  # TODO? remove watchrequest?
+        request = _etcd.WatchRequest(
             create_request=_etcd.WatchCreateRequest(
                     key=key,
                     range_end=range_end,

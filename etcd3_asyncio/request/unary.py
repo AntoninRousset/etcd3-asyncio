@@ -205,6 +205,6 @@ class Txn(Unary):
         requests = self._s_requests if response.succeeded else self._f_requests
         result = []
         for req, res in zip(requests, response.responses):
-            req.read_responseOp(res)  # TODO, need to decode?
+            req.read_responseOp(res)
             result.append(req.result())
         return response.succeeded, result
