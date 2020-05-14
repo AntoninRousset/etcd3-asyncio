@@ -110,7 +110,7 @@ class Lock():
             if self._watcher is None or self._watcher.done():
                 self._watcher = self._loop.create_task(self._watch())
             await fut
-            _, r = await request.Txn(success=success, client=self._client)
+            _, r = await request.Txn(success=actions, client=self._client)
         return r[2:]
 
     async def _release(self, lock_key, actions):
