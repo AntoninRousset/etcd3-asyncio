@@ -20,7 +20,7 @@ under the License.
 import asyncio
 from collections import defaultdict
 
-from . import client, CreateRevision, request
+from . import CreateRevision, request
 from .client import get_client
 from .lock import Lock
 
@@ -34,7 +34,8 @@ class Condition():
         cond_ids = defaultdict(int)
 
     # TODO different loops
-    def __init__(self, key: str, lock: Lock = None, *, client=None, loop=None):
+    def __init__(self, key: bytes, lock: Lock = None, *, client=None,
+                 loop=None):
         if client is None:
             client = get_client()
         if loop is None:
@@ -58,7 +59,7 @@ class Condition():
     def __repr__(self):
         res = super().__repr__()
         extra = 'locked' if self.locked() else 'unlocked'
-        return '<{} [{}]>'.format(res[1:-1], extra)
+        return '<{} on {} [{}]>'.format(res[1:-1], self._key, extra)
 
     async def __aenter__(self):
         await self.acquire()
@@ -72,7 +73,7 @@ class Condition():
                                           client=self._client):
             for event in events:
                 try:
-                    key = event.kv.key.decode()
+                    key = event.kv.key
                     if key in self._waiters:
                         waiter = self._waiters.pop(key)
                         if not waiter.done():
@@ -81,30 +82,26 @@ class Condition():
                         raise StopIteration
                 except StopIteration:
                     return
-                except Exception as e:
-                    print('***', repr(e))
 
-    async def wait(self, actions=[]):
+    async def wait(self, release_actions=[], acquire_actions=[]):
         if not self.locked():
             raise RuntimeError('cannot wait on un-acquired lock')
 
         await self._client.start_session()
         async with self._orderer:
             while True:
-                cond_id = str(self._cond_id).zfill(19)
-                cond_key = self._session_prefix + '/' + cond_id
+                cond_id = str(self._cond_id).zfill(19).encode()
+                cond_key = self._session_prefix + cond_id
                 self._cond_id += 1
 
                 cond = CreateRevision(cond_key) == 0,
-                put = [request.Put(cond_key, '', self._client.session_id),
-                       request.Delete(self._lock.owner)]  # release lock
+                put = [request.Put(cond_key, b'', self._client.session_id),
+                       request.Delete(self._lock.owner), *release_actions]
                 succeeded, r = await request.Txn(compare=cond, success=put,
                                                  client=self._client)
-
                 if succeeded:
                     break
                 # TODO find a good cond_id, based on newest key in session
-                print('failed to find cond key')
 
         try:
             fut = self._loop.create_future()
@@ -117,7 +114,7 @@ class Condition():
             cancelled = False
             while True:
                 try:
-                    return await self.acquire(actions)
+                    return r[2:], await self.acquire(acquire_actions)
                 except asyncio.CancelledError:
                     cancelled = True
 
@@ -151,11 +148,11 @@ class Condition():
 
     @property
     def _cond_prefix(self):
-        return self._key + '/_condition/'
+        return self._key + b'/_condition/'
 
     @property
     def _session_prefix(self):
-        return self._cond_prefix + str(self._client.session_id)
+        return self._cond_prefix + f'{self._client.session_id}/'.encode()
 
     @property
     def _orderer(self):

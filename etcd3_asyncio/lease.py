@@ -37,7 +37,8 @@ class Lease():
         self._loop = loop
 
         self._granted = False
-        self._keeping_alive = None
+        self._granting = asyncio.Lock()
+        self._heart = None
 
     def __await__(self):
         return self.grant().__await__()
@@ -47,21 +48,20 @@ class Lease():
         try:
             async for ttl in keepalive:
                 await asyncio.sleep(ttl/3)
-        except Exception as e:
-            print(repr(e))
         finally:
             self._granted = False
 
     async def grant(self, *, keepalive=True):
-        if self._granted:
-            return
-        self.id = await request.LeaseGrant(self.ttl, self.id,
-                                           client=self._client)
-        if keepalive:
-            self._keepingalive = self._loop.create_task(self.__keep_alive())
-        self._granted = True
-        return self.id
+        async with self._granting:
+            if self._granted:
+                return
+            self.id = await request.LeaseGrant(self.ttl, self.id,
+                                               client=self._client)
+            if keepalive:
+                self._heart = self._loop.create_task(self.__keep_alive())
+            self._granted = True
+            return self.id
 
     async def revoke(self):
-        self._keeping_alive.cancel()
+        self._heart.cancel()
         await request.LeaseRevoke(self.id, client=self._client)

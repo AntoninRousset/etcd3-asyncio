@@ -65,13 +65,10 @@ class Unary(ABC):
 
 class DeleteRange(Unary):
 
-    def __init__(self, key: str, range_end: str = None, *, client=None,
+    def __init__(self, key: bytes, range_end: bytes = None, *, client=None,
                  **kwargs):
-        key = str(key).encode()
         if range_end is None:
             range_end = range_end_for_prefix(key)
-        else:
-            range_end = str(range_end).encode()
         if client is None:
             client = get_client()
 
@@ -91,8 +88,8 @@ class DeleteRange(Unary):
 
 class Delete(DeleteRange):
 
-    def __init__(self, key: str, **kwargs):
-        super().__init__(key, '', **kwargs)
+    def __init__(self, key: bytes, **kwargs):
+        super().__init__(key, b'', **kwargs)
 
 
 class LeaseGrant(Unary):
@@ -122,13 +119,12 @@ class LeaseRevoke(Unary):
 
 class Put(Unary):
 
-    def __init__(self, key: str, value: str, lease_id=0, *, client=None,
+    def __init__(self, key: bytes, value: bytes, lease_id=0, *, client=None,
                  **kwargs):
         if client is None:
             client = get_client()
 
-        request = _etcd.PutRequest(key=str(key).encode(),
-                                   value=str(value).encode(), lease=lease_id)
+        request = _etcd.PutRequest(key=key, value=value, lease=lease_id)
         method = client._kvstub.Put
         super().__init__(request, method, client=client, **kwargs)
 
@@ -144,13 +140,10 @@ class Range(Unary):
     _orders = {None: 0, 'ascend': 1, 'descend': 2}
     _targets = {'key': 0, 'version': 1, 'create': 2, 'mod': 3, 'value': 4}
 
-    def __init__(self, key: str, range_end: str = None, limit: int = 0, *,
+    def __init__(self, key: bytes, range_end: bytes = None, limit: int = 0, *,
                  sort_order=None, sort_target='key', client=None, **kwargs):
-        key = str(key).encode()
         if range_end is None:
             range_end = range_end_for_prefix(key)
-        else:
-            range_end = str(range_end).encode()
         if client is None:
             client = get_client()
 
@@ -161,8 +154,7 @@ class Range(Unary):
         super().__init__(request, method, client=client, **kwargs)
 
     def parse_response(self, response):
-        res = [(kvs.key.decode(), kvs.value.decode()) for kvs in response.kvs]
-        return OrderedDict(res)
+        return OrderedDict([(kvs.key, kvs.value) for kvs in response.kvs])
 
     def to_requestOp(self) -> _etcd.RequestOp:
         return _etcd.RequestOp(request_range=self._request)
@@ -173,13 +165,13 @@ class Range(Unary):
 
 class Get(Range):
 
-    def __init__(self, key: str, default=None, **kwargs):
-        super().__init__(key, '', 1, **kwargs)
+    def __init__(self, key: bytes, default=None, **kwargs):
+        super().__init__(key, b'', 1, **kwargs)
         self.default = default
 
     def parse_response(self, response):
         if response.count >= 1:
-            return response.kvs[0].value.decode()
+            return response.kvs[0].value
         return self.default
 
 

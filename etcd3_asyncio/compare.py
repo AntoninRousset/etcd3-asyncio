@@ -25,7 +25,7 @@ from . import _etcd
 
 class CompareTarget(ABC):
 
-    def __init__(self, target: str, key: str):
+    def __init__(self, target: str, key: bytes):
         self.target = target
         self.key = key
 
@@ -44,25 +44,25 @@ class CompareTarget(ABC):
 
 class CreateRevision(CompareTarget):
 
-    def __init__(self, key: str):
+    def __init__(self, key: bytes):
         super().__init__('create_revision', key)
 
 
 class ModRevision(CompareTarget):
 
-    def __init__(self, key: str):
+    def __init__(self, key: bytes):
         super().__init__('mod_revision', key)
 
 
 class Value(CompareTarget):
 
-    def __init__(self, key: str):
+    def __init__(self, key: bytes):
         super().__init__('value', key)
 
 
 class Version(CompareTarget):
 
-    def __init__(self, key: str):
+    def __init__(self, key: bytes):
         super().__init__('version', key)
 
 
@@ -72,18 +72,13 @@ class Compare:
     targets = {'version': 0, 'create_revision': 1, 'mod_revision': 2,
                'value': 3}
 
-    def __init__(self, result: str, target: str, key: str, data: int):
+    def __init__(self, result: str, target: str, key: bytes, data):
         if result not in self.results:
             raise KeyError(f'Unknown compare result "{result}"')
         if target not in self.targets:
             raise KeyError(f'Unknown compare target "{target}"')
 
-        if target == 'value':
-            data = str(data).encode()
-        else:
-            data = int(data)
-
         self._compare = _etcd.Compare(result=self.results[result],
                                       target=self.targets[target],
-                                      key=str(key).encode(), **{target: data})
+                                      key=key, **{target: data})
 

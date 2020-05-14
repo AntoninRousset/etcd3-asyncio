@@ -34,7 +34,7 @@ class Lock():
         lock_ids = defaultdict(int)
 
     # TODO different loops
-    def __init__(self, key: str, *, client=None, loop=None):
+    def __init__(self, key: bytes, *, client=None, loop=None):
         if client is None:
             client = get_client()
         if loop is None:
@@ -47,7 +47,7 @@ class Lock():
     def __repr__(self):
         res = super().__repr__()
         extra = 'locked' if self._locked else 'unlocked'
-        return '<{} [{}]>'.format(res[1:-1], extra)
+        return '<{} on {} [{}]>'.format(res[1:-1], self._key, extra)
 
     async def __aenter__(self):
         await self.acquire()
@@ -75,20 +75,17 @@ class Lock():
             except StopIteration:
                 self.owner = None
                 return
-            except Exception as e:
-                print('***', repr(e))
-                raise
 
     async def acquire(self, actions=[]):
         await self._client.start_session()
         async with self._orderer:
             while True:
-                lock_id = str(self._lock_id).zfill(19)
+                lock_id = str(self._lock_id).zfill(19).encode()
                 lock_key = self._session_prefix + lock_id
                 self._lock_id += 1
 
                 cond = CreateRevision(lock_key) == 0,
-                put = request.Put(lock_key, '', self._client.session_id)
+                put = request.Put(lock_key, b'', self._client.session_id)
                 get = request.Get(lock_key)
                 get_owner = request.Range(self._lock_prefix, limit=1,
                                           sort_target='create',
@@ -106,7 +103,6 @@ class Lock():
                 if succeeded:
                     break
                 # TODO find a good lock_id, based on newest key in session
-                print('failed to find lock key')
 
         if self.owner != lock_key:
             fut = self._loop.create_future()
@@ -127,15 +123,15 @@ class Lock():
         return self._loop.create_task(self._release(self.owner, actions))
 
     def locked(self):
-        return self.owner is not None
+        return self.owner is not None  # TODO
 
     @property
     def _lock_prefix(self):
-        return self._key + '/_lock/'
+        return self._key + b'/_lock/'
 
     @property
     def _session_prefix(self):
-        return self._lock_prefix + str(self._client._session.id) + '/'
+        return self._lock_prefix + f'{self._client.session_id}/'.encode()
 
     @property
     def _orderer(self):

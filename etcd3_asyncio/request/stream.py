@@ -73,15 +73,12 @@ class Watch(Stream):
 
     filter_types = {'noput': 0, 'nodelete': 1}
 
-    def __init__(self, key: str, range_end: str = None, *, start_revision=None,
-                 filters: str = [], client=None, **kwargs):
-        key = str(key).encode()
+    def __init__(self, key: bytes, range_end: bytes = None, *,
+                 start_revision=None, filters=[], client=None, **kwargs):
         if client is None:
             client = get_client()
         if range_end is None:
             range_end = range_end_for_prefix(key)
-        else:
-            range_end = str(range_end).encode()
 
         filters = [self.filter_types[f] for f in ensure_iter(filters)]
 
