@@ -19,7 +19,7 @@ under the License.
 
 from grpclib.client import Channel
 
-from . import _etcd
+from . import request, _etcd
 
 
 class Client:
@@ -43,6 +43,33 @@ class Client:
     @property
     def session_id(self):
         return self._session.id
+
+    def Delete(self, *args, **kwargs):
+        return request.Delete(*args, **kwargs, client=self)
+
+    def DeleteRange(self, *args, **kwargs):
+        return request.DeleteRange(*args, **kwargs, client=self)
+
+    def Get(self, *args, **kwargs):
+        return request.Get(*args, **kwargs, client=self)
+
+    def LeaseGrant(self, *args, **kwargs):
+        return request.LeaseGrant(*args, **kwargs, client=self)
+
+    def LeaseKeepAlive(self, *args, **kwargs):
+        return request.LeaseKeepAlive(*args, **kwargs, client=self)
+
+    def LeaseRevoke(self, *args, **kwargs):
+        return request.LeaseRevoke(*args, **kwargs, client=self)
+
+    def Put(self, *args, **kwargs):
+        return request.Put(*args, **kwargs, client=self)
+
+    def Range(self, *args, **kwargs):
+        return request.Range(*args, **kwargs, client=self)
+
+    def Txn(self, *args, **kwargs):
+        return request.Txn(*args, **kwargs, client=self)
 
 
 _running_client = None

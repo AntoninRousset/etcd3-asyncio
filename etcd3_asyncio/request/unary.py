@@ -21,7 +21,7 @@ import asyncio
 from abc import ABC
 from collections import OrderedDict
 
-from .. import _etcd, get_client
+from .. import _etcd
 from ..utils import ensure_iter, range_end_for_prefix
 
 
@@ -70,6 +70,7 @@ class DeleteRange(Unary):
         if range_end is None:
             range_end = range_end_for_prefix(key)
         if client is None:
+            from ..client import get_client
             client = get_client()
 
         request = _etcd.DeleteRangeRequest(key=key, range_end=range_end)
@@ -96,6 +97,7 @@ class LeaseGrant(Unary):
 
     def __init__(self, TTL: int, ID: int = 0, *, client=None, **kwargs):
         if client is None:
+            from ..client import get_client
             client = get_client()
 
         request = _etcd.LeaseGrantRequest(ID=int(ID), TTL=int(TTL))
@@ -110,6 +112,7 @@ class LeaseRevoke(Unary):
 
     def __init__(self, ID: int, *, client=None, **kwargs):
         if client is None:
+            from ..client import get_client
             client = get_client()
 
         request = _etcd.LeaseRevokeRequest(ID=int(ID))
@@ -122,6 +125,7 @@ class Put(Unary):
     def __init__(self, key: bytes, value: bytes, lease_id=0, *, client=None,
                  **kwargs):
         if client is None:
+            from ..client import get_client
             client = get_client()
 
         request = _etcd.PutRequest(key=key, value=value, lease=lease_id)
@@ -145,6 +149,7 @@ class Range(Unary):
         if range_end is None:
             range_end = range_end_for_prefix(key)
         if client is None:
+            from ..client import get_client
             client = get_client()
 
         request = _etcd.RangeRequest(key=key, range_end=range_end, limit=limit,
@@ -177,9 +182,10 @@ class Get(Range):
 
 class Txn(Unary):
 
-    def __init__(self, compare=[], success=[], failure=[], *, client=None,
+    def __init__(self, success=[], *, compare=[], failure=[], client=None,
                  **kwargs):
         if client is None:
+            from ..client import get_client
             client = get_client()
 
         self._s_requests = ensure_iter(success)

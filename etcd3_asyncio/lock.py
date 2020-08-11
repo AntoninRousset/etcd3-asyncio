@@ -84,13 +84,12 @@ class Lock():
                 lock_key = self._session_prefix + lock_id
                 self._lock_id += 1
 
-                cond = CreateRevision(lock_key) == 0,
+                cond = CreateRevision(lock_key) == 0
                 put = request.Put(lock_key, b'', self._client.session_id)
                 get = request.Get(lock_key)
                 get_owner = request.Range(self._lock_prefix, limit=1,
                                           sort_target='create',
-                                          sort_order='ascend',
-                                          client=self._client)
+                                          sort_order='ascend')
 
                 success = [put, get_owner, *ensure_iter(actions)]
 

@@ -20,7 +20,7 @@ under the License.
 import asyncio
 from abc import ABC, abstractmethod
 
-from .. import _etcd, get_client
+from .. import _etcd
 from ..utils import ensure_iter, range_end_for_prefix
 
 
@@ -59,6 +59,7 @@ class LeaseKeepAlive(Stream):
 
     def __init__(self, ID: int, *, client=None, **kwargs):
         if client is None:
+            from ..client import get_client
             client = get_client()
 
         request = _etcd.LeaseKeepAliveRequest(ID=int(ID))
@@ -76,6 +77,7 @@ class Watch(Stream):
     def __init__(self, key: bytes, range_end: bytes = None, *,
                  start_revision=None, filters=[], client=None, **kwargs):
         if client is None:
+            from ..client import get_client
             client = get_client()
         if range_end is None:
             range_end = range_end_for_prefix(key)

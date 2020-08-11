@@ -19,5 +19,3 @@ under the License.
 
 from .stream import LeaseKeepAlive, Watch
 from .unary import Delete, DeleteRange, Get, LeaseGrant, LeaseRevoke, Put, Range, Txn
-
-

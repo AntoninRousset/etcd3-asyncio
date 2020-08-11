@@ -21,4 +21,4 @@ from .client import Client, get_client
 from .compare import CreateRevision, ModRevision, Value, Version
 from .condition import Condition
 from .lock import Lock
-from .request import DeleteRange, Get, Put, Range, Txn, Watch
+from .request import Delete, DeleteRange, Get, Put, Range, Txn, Watch
